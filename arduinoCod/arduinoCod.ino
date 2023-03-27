@@ -1,45 +1,70 @@
-#include <LiquidCrystal_I2C.h> // Libreria para el manejo de la pantalla LCD.
 #include <ESP8266WiFi.h> // Libreria para conectar el ESP8266 a WIFI
+#include <strings_en.h>
+#include <WiFiManager.h> // Hace que el ESP8266 se convierta en una "access Point" para configurar la red Wifi 
+#include <DNSServer.h> // Crea un servidor Web
+#include <ESP8266WebServer.h>
+
+#include <Ticker.h>
+#define pinLedWifi D4
+Ticker ticker;
+
+void blinkLed(){
+  // Cambia el estado del LED
+  byte estado = digitalRead(pinLedWifi);
+  digitalWrite(pinLedWifi, !estado);
+}
+
+#include <LiquidCrystal_I2C.h> // Libreria para el manejo de la pantalla LCD.
 
 // COMPONENTES:
 //____________________PANTALLA LCD____________________
 LiquidCrystal_I2C lcd(0x27,16,2); // Creamos un objeto para controlar los parametros (INFO) que se le envia al LED
 
 //____________________ESP8266____________________
-// Información de la red:
-String ssid = "ARRIS-7EEA"; // nombre de la red
-String password = "ECA940417EEA"; // contraseña de la red
 WiFiServer server(80); // puerto de comuncicacíon --> puerto 80: es para paginas no seguras
 
 void setup() {
   // Inciamos la comunicación Serial
   Serial.begin(115200);
-  Serial.println("\n");
-  pinMode(D4,OUTPUT);
 
-  // Conexión WIFI
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-    Serial.print("Conectado a la red Wifi:");
-    Serial.println(WiFi.SSID());
-    Serial.print("IP: ");
-    Serial.println(WiFi.localIP());
-    Serial.print("macAddress: ");
-    Serial.println(WiFi.macAddress());
-    digitalWrite(D4, HIGH);
+  // Modo del pin
+  pinMode(pinLedWifi, OUTPUT);
+  // Empezamos el temporizador que hará parpadear el LED
+  ticker.attach(0.2, blinkLed);
 
-    // Iniciamos el servidor local
-    server.begin(); 
+  // ESP8266
+  WiFiManager wifiManager; // Creamos un objeto de tipo WiFiManager
+  // BORRA LAS CREDENCIALES DE LA RED WIFI 
+  //wifiManager.resetSettings();
+  // Creamos AP y portal cautivo
+                          // (nombre, contraseña -> 8 a 64 caracteres)
+  if (!wifiManager.autoConnect("ESP8266Temp")){// Busca la RED WIFI que el ESP8266 se habia conectado la ultima vez para conectarse nuevamente
+    Serial.println("Fallo en la conexión (timeout)");
+    ESP.reset();
+    delay(1000);
+  } 
+  // Nota: El modulo NodeMCU guarda los datos de la red a la cual el dispositivo se conecto la ultima vez (CREDENCIALES); Si no se conecta va a levantar un acces point en la red
+  Serial.println("Ya estás conectado");
+  Serial.print("Conectado a la red Wifi:");
+  Serial.println(WiFi.SSID());
+  Serial.print("IP: ");
+  Serial.println(WiFi.localIP());
+  Serial.print("macAddress: ");
+  Serial.println(WiFi.macAddress());
+  // Eliminamos el temporizador
+  ticker.detach();
+  // Apagamos el LED
+  digitalWrite(pinLedWifi, HIGH);
 
-    // PANTALLA LCD
-    lcd.init();
-    lcd.backlight();
-    lcd.clear();
-    lcd.setCursor(0,0);
-    lcd.print("Type a message");
+  // Iniciamos el servidor local
+  server.begin(); 
+
+   // PANTALLA LCD
+   lcd.init();
+   lcd.backlight();
+   lcd.clear();
+   lcd.setCursor(0,0);
+   lcd.print("Type a message");
 }
 
 void loop() {
@@ -51,7 +76,7 @@ void loop() {
   // Nota: Reinicia el ciclo en caso de que el cliente no se haya creado
 
   Serial.println("New client...");
-  while(!client.available()){ // hace una pausa esperando a que el cliente entre a la pagina
+  while(!client.available()){ // hace una pausa esperando a que el cliente envie una petición
     delay(1);
   }
 
@@ -59,13 +84,13 @@ void loop() {
   request = request.substring(request.indexOf("=") + 1,request.indexOf("HTTP/1.1"));
   request.replace("+"," ");
   Serial.println(request);
-  // client.flush(); // limpia la petición del cliente
+  client.flush(); // limpia la petición del cliente
 
   // Verificamos que el mensaje se envio correctamente
   if (request.indexOf("GET /") == -1){
     // Mostramos el mensaje en la pantalla
     lcd.clear();
-    lcd.setCursor(10,0);
+    lcd.setCursor(15,0);
     lcd.print(request);
     for (int i= 0; i < 5; i++){
       for (int i=0; i <= sizeof(request); i++){
